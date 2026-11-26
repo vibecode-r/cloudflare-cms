@@ -1,78 +1,161 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Cloudflare Blog</title>
+    <title>Admin Dashboard - MyBlog CMS</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
-<body class="bg-gray-50 text-gray-800 min-h-screen">
-    <nav class="bg-white border-b sticky top-0 z-10">
-        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-            <a href="/" class="text-2xl font-bold text-blue-600">MyBlog CMS</a>
-            <a href="/admin.html" class="text-sm bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-700">WP
-                Admin</a>
+<body class="bg-gray-100 min-h-screen flex">
+    <!-- Sidebar -->
+    <aside class="w-60 bg-gray-900 text-white p-6 flex flex-col justify-between">
+        <div>
+            <h1 class="text-xl font-bold mb-8">CMS Dashboard</h1>
+            <nav class="space-y-2 text-sm">
+                <button onclick="resetForm()" class="w-full text-left px-3 py-2 rounded bg-blue-600 hover:bg-blue-500">+ New Post</button>
+                <a href="/" class="block px-3 py-2 rounded hover:bg-gray-800">View Live Site &rarr;</a>
+            </nav>
         </div>
-    </nav>
+        <button onclick="logout()" class="text-xs text-gray-400 hover:text-white text-left">Logout</button>
+    </aside>
 
-    <main class="max-w-4xl mx-auto px-4 py-10">
-        <div id="post-list" class="space-y-6"></div>
-        <article id="single-post" class="hidden bg-white p-8 rounded-xl shadow-sm border">
-            <button onclick="showList()"
-                class="text-blue-600 text-sm font-medium mb-6 inline-block hover:underline">&larr; Back to all
-                posts</button>
-            <h1 id="post-title" class="text-3xl font-bold mb-2"></h1>
-            <p id="post-date" class="text-sm text-gray-400 mb-6"></p>
-            <div id="post-content" class="prose max-w-none leading-relaxed space-y-4"></div>
-        </article>
+    <!-- Main Content -->
+    <main class="flex-1 p-8 max-w-5xl">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Editor -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border">
+                <h2 id="form-heading" class="text-lg font-bold mb-4">Create New Post</h2>
+                <form id="post-form" class="space-y-4">
+                    <input type="hidden" id="post-id">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Title</label>
+                        <input type="text" id="title" required class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Slug (optional)</label>
+                            <input type="text" id="slug" placeholder="auto-generated" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Status</label>
+                            <select id="status" class="w-full border rounded-lg px-3 py-2">
+                                <option value="published">Published</option>
+                                <option value="draft">Draft</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Short Excerpt</label>
+                        <input type="text" id="excerpt" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Content (HTML supported)</label>
+                        <textarea id="content" rows="10" required class="w-full border rounded-lg px-3 py-2 font-mono text-sm"></textarea>
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 font-medium">Save Post</button>
+                        <button type="button" onclick="resetForm()" class="bg-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Post List -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border">
+                <h2 class="text-lg font-bold mb-4">All Posts</h2>
+                <div id="admin-posts" class="space-y-3 text-sm"></div>
+            </div>
+        </div>
     </main>
 
     <script>
-        async function loadPosts() {
-            const res = await fetch('/api/posts');
-            const posts = await res.json();
-            const container = document.getElementById('post-list');
+        let password = sessionStorage.getItem('cms_pass');
+        if (!password) {
+            password = prompt("Enter Admin Password (default: admin123):");
+            sessionStorage.setItem('cms_pass', password || '');
+        }
 
-            if (!posts.length) {
-                container.innerHTML = `<p class="text-gray-500 text-center py-10">No posts published yet. Go to Admin to create one!</p>`;
+        function logout() {
+            sessionStorage.removeItem('cms_pass');
+            location.reload();
+        }
+
+        async function loadAdminPosts() {
+            const res = await fetch('/api/posts?all=true');
+            const posts = await res.json();
+            document.getElementById('admin-posts').innerHTML = posts.map(p => `
+                <div class="p-3 border rounded-lg flex justify-between items-start gap-2">
+                    <div>
+                        <p class="font-semibold">${p.title}</p>
+                        <span class="text-xs px-2 py-0.5 rounded ${p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${p.status}</span>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <button onclick='editPost(${JSON.stringify(p).replace(/'/g, "&apos;")})' class="text-blue-600 hover:underline">Edit</button>
+                        <button onclick="deletePost(${p.id})" class="text-red-600 hover:underline">Del</button>
+                    </div>
+                </div>
+            `).join('') || '<p class="text-gray-400">No posts yet.</p>';
+        }
+
+        function editPost(post) {
+            document.getElementById('form-heading').textContent = 'Edit Post';
+            document.getElementById('post-id').value = post.id;
+            document.getElementById('title').value = post.title;
+            document.getElementById('slug').value = post.slug;
+            document.getElementById('status').value = post.status;
+            document.getElementById('excerpt').value = post.excerpt || '';
+            document.getElementById('content').value = post.content;
+        }
+
+        function resetForm() {
+            document.getElementById('form-heading').textContent = 'Create New Post';
+            document.getElementById('post-form').reset();
+            document.getElementById('post-id').value = '';
+        }
+
+        document.getElementById('post-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('post-id').value;
+            const payload = {
+                title: document.getElementById('title').value,
+                slug: document.getElementById('slug').value,
+                status: document.getElementById('status').value,
+                excerpt: document.getElementById('excerpt').value,
+                content: document.getElementById('content').value
+            };
+
+            const res = await fetch(id ? `/api/posts/${id}` : '/api/posts', {
+                method: id ? 'PUT' : 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${password}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.status === 401) {
+                alert('Wrong password! Please logout and try again.');
                 return;
             }
+            if (res.ok) {
+                resetForm();
+                loadAdminPosts();
+            } else {
+                const err = await res.json();
+                alert('Error: ' + err.error);
+            }
+        });
 
-            container.innerHTML = posts.map(p => `
-                <div class="bg-white p-6 rounded-xl shadow-sm border hover:border-blue-300 transition cursor-pointer" onclick="openPost('${p.slug}')">
-                    <h2 class="text-xl font-bold text-gray-900 mb-2">${p.title}</h2>
-                    <p class="text-gray-600 mb-3">${p.excerpt || p.content.replace(/<[^>]*>/g, '').slice(0, 140) + '...'}</p>
-                    <span class="text-xs text-gray-400">${new Date(p.created_at).toLocaleDateString()}</span>
-                </div>
-            `).join('');
+        async function deletePost(id) {
+            if (!confirm('Delete this post?')) return;
+            const res = await fetch(`/api/posts/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${password}` }
+            });
+            if (res.ok) loadAdminPosts();
+            else alert('Unauthorized or error deleting post.');
         }
 
-        async function openPost(slug) {
-            const res = await fetch(`/api/posts/${slug}`);
-            const post = await res.json();
-            document.getElementById('post-list').classList.add('hidden');
-            document.getElementById('single-post').classList.remove('hidden');
-            document.getElementById('post-title').textContent = post.title;
-            document.getElementById('post-date').textContent = new Date(post.created_at).toLocaleDateString();
-            document.getElementById('post-content').innerHTML = post.content;
-            window.history.pushState({}, '', `?post=${slug}`);
-        }
-
-        function showList() {
-            document.getElementById('single-post').classList.add('hidden');
-            document.getElementById('post-list').classList.remove('hidden');
-            window.history.pushState({}, '', '/');
-        }
-
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('post')) {
-            openPost(params.get('post'));
-        } else {
-            loadPosts();
-        }
+        loadAdminPosts();
     </script>
 </body>
-
 </html>
